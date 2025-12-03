@@ -10,32 +10,6 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ==================================================================
-// REALTIME LISTENER — smooth updates (no full view refresh)
-// ==================================================================
-
-const setsChannel = supabase
-  .channel("sets-realtime")
-  .on(
-    "postgres_changes",
-    {
-      event: "*",
-      schema: "public",
-      table: "sets",
-    },
-    async (payload) => {
-      if (!window.currentMatchId || !window.currentTournamentId) return;
-
-      const updated = payload.new;
-      if (!updated) return;
-
-      if (updated.match_id !== window.currentMatchId) return;
-
-      smoothUpdateSetRow(updated);
-    }
-  )
-  .subscribe();
-
 // ===========================================================
 // DATABASE WRITE HELPERS
 // ===========================================================
@@ -62,3 +36,4 @@ async function dbUpdateLiveSetScore({ matchId, setNumber, p1, p2, thrower }) {
     .eq("match_id", matchId)
     .eq("set_number", setNumber);
 }
+

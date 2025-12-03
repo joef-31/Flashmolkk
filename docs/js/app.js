@@ -48,6 +48,91 @@ function buildThrowsModel(throws, player1Id, player2Id) {
   return model;
 }
 
+// ==================================================================
+// REALTIME LISTENER — smooth updates (no full view refresh)
+// ==================================================================
+
+const setsChannel = supabase
+  .channel("sets-realtime")
+  .on(
+    "postgres_changes",
+    {
+      event: "*",
+      schema: "public",
+      table: "sets",
+    },
+    async (payload) => {
+      if (!window.currentMatchId || !window.currentTournamentId) return;
+
+      const updated = payload.new;
+      if (!updated) return;
+
+      if (updated.match_id !== window.currentMatchId) return;
+
+      smoothUpdateSetRow(updated);
+    }
+  )
+  .subscribe();
+
+// ======================================================================
+// REALTIME: UPDATE MATCH LIST VIEW (tab-matches) LIVE
+// ======================================================================
+
+const setsChannelMatchList = supabase
+  .channel("sets-realtime-matchlist")
+  .on(
+    "postgres_changes",
+    {
+      event: "*",
+      schema: "public",
+      table: "sets"
+    },
+    (payload) => {
+      const updated = payload.new;
+      if (!updated) return;
+
+      const matchId = updated.match_id;
+      const p1 = updated.score_player1 ?? "";
+      const p2 = updated.score_player2 ?? "";
+      const setNumber = updated.set_number;
+
+      // ONLY update if user is currently on the tournament view page
+      const matchesTab = document.getElementById("tab-matches");
+      if (!matchesTab || matchesTab.style.display === "none") return;
+
+      // Find the match-card for this match
+      const card = document.querySelector(`.card[data-mid="${matchId}"]`);
+      if (!card) return;
+
+      // Find the live small-score boxes inside the match card
+      const liveBoxes = card.querySelectorAll(".mc-livebox");
+
+      if (liveBoxes.length === 2) {
+        liveBoxes[0].textContent = p1;
+        liveBoxes[1].textContent = p2;
+
+        if (p1 !== "" || p2 !== "") {
+          liveBoxes[0].classList.add("is-live");
+          liveBoxes[1].classList.add("is-live");
+        }
+      }
+
+      // Update overall set score if a set is won
+      if (updated.winner_player_id) {
+        const p1SetCell = card.querySelectorAll(".mc-setscore")[0];
+        const p2SetCell = card.querySelectorAll(".mc-setscore")[1];
+
+        const isP1Winner = updated.winner_player_id === card.dataset.player1Id;
+        const isP2Winner = updated.winner_player_id === card.dataset.player2Id;
+
+        // But better: fetch latest match summary
+        updateMatchListFinalScore(matchId, card);
+      }
+    }
+  )
+  .subscribe();
+
+
 /// ==================================================================
 // SMOOTH UPDATE FOR LIVE MATCH DETAILS (NO FULL REFRESH)
 // ==================================================================
@@ -135,6 +220,23 @@ async function updateOverallMatchScore() {
       (match.final_sets_player1 ?? 0) + " – " + (match.final_sets_player2 ?? 0);
   }
 }
+
+async function updateMatchListFinalScore(matchId, card) {
+  const { data: match, error } = await supabase
+    .from("matches")
+    .select("final_sets_player1, final_sets_player2")
+    .eq("id", matchId)
+    .maybeSingle();
+
+  if (error || !match) return;
+
+  const setCells = card.querySelectorAll(".mc-setscore");
+  if (setCells.length === 2) {
+    setCells[0].textContent = match.final_sets_player1 ?? 0;
+    setCells[1].textContent = match.final_sets_player2 ?? 0;
+  }
+}
+
 
 // --------------------------------------------
 // BUILD THROWS TABLE HTML
