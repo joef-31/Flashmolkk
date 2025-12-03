@@ -439,6 +439,8 @@ async function loadTournamentView(tournamentId) {
 // --------------------------------------------
 
 async function loadMatchDetail(matchId, tournamentId) {
+  window.currentMatchId = matchId;
+  window.currentTournamentId = tournamentId;
   showBackButton(() => loadTournamentView(tournamentId));
   updateScoreButtonVisibility(true);
   showLoading("Loading match…");
@@ -672,8 +674,6 @@ async function loadMatchDetail(matchId, tournamentId) {
     });
   });
 }
-
-
 
 // --------------------------------------------
 // INITIAL LOAD
