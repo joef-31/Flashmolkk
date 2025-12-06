@@ -1199,9 +1199,10 @@ async function loadMatchDetail(matchId, tournamentId) {
   window.currentTournamentId = tournamentId;
   window.lastSeenSet = null;
 
-  showBackButton(() => {
-    loadTournamentView(tournamentId);
-  });
+showBackButton(() => {
+  window.location.hash = `#/tournament/${tournamentId}`;
+});
+
   updateScoreButtonVisibility(true);
   setAddFriendlyVisible(false);
 
