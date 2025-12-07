@@ -854,13 +854,14 @@ function renderMatchCards(matches, tournamentId, liveSetByMatch, dateFilter) {
   if (!matchesContainer) return;
 
   let filtered = matches;
+
   if (dateFilter) {
     filtered = matches.filter(
       (m) => isoDateOnly(m.match_date) === dateFilter
     );
   }
 
-  if (filtered.length === 0) {
+  if (!filtered || filtered.length === 0) {
     matchesContainer.innerHTML =
       '<div class="empty-message">No matches on this date.</div>';
     return;
@@ -897,7 +898,7 @@ function renderMatchCards(matches, tournamentId, liveSetByMatch, dateFilter) {
           <div class="mc-meta">${dateLabel}</div>
           <div class="mc-player">${p1Name}</div>
           <div class="mc-livebox ${liveSet ? "is-live" : ""}">
-            ${liveP1 ?? ""}
+            ${liveP1 !== null && liveP1 !== undefined ? liveP1 : ""}
           </div>
           <div class="mc-setscore">${setsScore1}</div>
 
@@ -907,7 +908,7 @@ function renderMatchCards(matches, tournamentId, liveSetByMatch, dateFilter) {
 
           <div class="mc-player">${p2Name}</div>
           <div class="mc-livebox ${liveSet ? "is-live" : ""}">
-            ${liveP2 ?? ""}
+            ${liveP2 !== null && liveP2 !== undefined ? liveP2 : ""}
           </div>
           <div class="mc-setscore">${setsScore2}</div>
         </div>
@@ -917,6 +918,7 @@ function renderMatchCards(matches, tournamentId, liveSetByMatch, dateFilter) {
 
   matchesContainer.innerHTML = html;
 
+  // Re-bind match click handlers
   document.querySelectorAll("[data-mid]").forEach((el) => {
     el.addEventListener("click", () => {
       const mid = el.getAttribute("data-mid");
@@ -979,65 +981,10 @@ async function loadTournamentView(tournamentId) {
     return;
   }
 
-activeDateFilter = null;
-
-const matchDates = matches
-  .map((m) => isoDateOnly(m.match_date))
-  .filter(Boolean);
-
-function clampDatesAroundToday(dates, limitEachSide = 5) {
-  const today = new Date().toISOString().split("T")[0];
-
-  const past = dates.filter(d => d < today).slice(-limitEachSide);
-  const future = dates.filter(d => d > today).slice(0, limitEachSide);
-
-  return [...past, today, ...future].filter(
-    (v, i, a) => a.indexOf(v) === i
-  );
-}
-
-renderDateBar(matchDates, (selectedDate) => {
-  renderMatchesForTournament(matches, selectedDate);
-});
-
-function filterMatchesByDate(matches, dateFilter) {
-  if (!dateFilter) return matches;
-  return matches.filter(
-    (m) => isoDateOnly(m.match_date) === dateFilter
-  );
-}
-
-function renderMatchesForTournament(matches, dateFilter = null) {
-  const container = document.getElementById("tab-matches");
-  if (!container) return;
-
-  let filtered = matches;
-
-  if (dateFilter) {
-    filtered = matches.filter(
-      (m) => isoDateOnly(m.match_date) === dateFilter
-    );
-  }
-
-  if (filtered.length === 0) {
-    container.innerHTML =
-      '<div class="empty-message">No matches on this date.</div>';
-    return;
-  }
-
-  let html = '<div class="section-title">Matches</div>';
-
- // filtered.forEach(/* EXISTING match card code */);
-
-  container.innerHTML = html;
-
-  // rebind click handlers
-}
-
-
   const tournamentName = matches[0].tournament?.name || "Tournament";
   const matchIds = matches.map((m) => m.id);
 
+  // Load sets for all matches in the tournament
   let sets = [];
   if (matchIds.length > 0) {
     const { data: setsData, error: setsError } = await supabase
@@ -1055,6 +1002,7 @@ function renderMatchesForTournament(matches, dateFilter = null) {
     sets = setsData || [];
   }
 
+  // Determine which set (if any) is live per match
   const liveSetByMatch = {};
   sets.forEach((s) => {
     if (!s.match_id) return;
@@ -1071,29 +1019,7 @@ function renderMatchesForTournament(matches, dateFilter = null) {
     }
   });
 
-const today = new Date().toISOString().split("T")[0];
-
-activeDateFilter = matchDates.includes(today) ? today : null;
-
-renderDateBar(matchDates, (selectedDate) => {
-  activeDateFilter = selectedDate;
-  renderMatchCards(
-    matches,
-    tournamentId,
-    liveSetByMatch,
-    activeDateFilter
-  );
-});
-
-// Initial render
-renderMatchCards(
-  matches,
-  tournamentId,
-  liveSetByMatch,
-  activeDateFilter
-);
-
-
+  // Build main tournament card + tabs
   let html = `
     <div class="card">
       <div class="tournament-header">
@@ -1119,16 +1045,30 @@ renderMatchCards(
     if (standingsPanel) standingsPanel.style.display = "none";
   }
 
+  // --- Date bar + default filter = today ---
+  const today = new Date().toISOString().split("T")[0];
+  const matchDates = matches
+    .map((m) => isoDateOnly(m.match_date))
+    .filter(Boolean);
 
-  document.querySelectorAll("[data-mid]").forEach((el) => {
-    el.addEventListener("click", () => {
-      const mid = el.getAttribute("data-mid");
-      const tid = el.getAttribute("data-tid");
-      window.location.hash = `#/match/${mid}/${tid}`;
-    });
+  // Always default to "today" on tournament view
+  activeDateFilter = today;
+
+  renderDateBar(matchDates, (selectedDate) => {
+    // Toggle behaviour: clicking active pill clears filter → re-apply "today"
+    activeDateFilter = selectedDate || today;
+    renderMatchCards(
+      matches,
+      tournamentId,
+      liveSetByMatch,
+      activeDateFilter
+    );
   });
 
-  // Standings (not used for Friendlies, but built for normal tournaments)
+  // Initial render for today
+  renderMatchCards(matches, tournamentId, liveSetByMatch, activeDateFilter);
+
+  // --- Standings (unchanged from your working version) ---
   if (!isFriendlies) {
     const standingsContainer = document.getElementById("tab-standings");
     const matchesById = {};
